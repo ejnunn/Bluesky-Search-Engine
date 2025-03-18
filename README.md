@@ -29,4 +29,7 @@ Further work will focus on:
 - Integrating additional cloud-based monitoring and deployment strategies.
 
 ## Getting Started
-Detailed setup instructions, deployment guides, and further documentation will be provided as the project evolves.
+1. Ensure `kafka` is installed locally.
+2. Run `python3 backend/data_ingestion.py` to begin fetching posts from Bluesky and posting them to the `bluesky-posts` Kafka topic. This script will also be listening to `bluesky-authors` for new authors to fetch more feeds.
+3. Run `python2 backend/author_extractor.py` to consume `bluesky-posts`, extract the author handles, and post them to `bluesky-authors`.
+4. To view the state of the Kafka brokers (locally for now) use the following command in a separate terminal: `kcat -b <BROKER> -C -t <TOPIC>`
