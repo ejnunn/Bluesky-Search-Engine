@@ -5,6 +5,7 @@ import signal
 import logging
 import threading
 from kafka import KafkaConsumer, KafkaProducer
+from kafka_utils import create_consumer, create_producer
 from BlueSkyClient import BlueSkyClient
 from config import KAFKA_BROKER, POSTS_TOPIC, AUTHORS_TOPIC, GROUP_ID, BLUESKY_EMAIL, BLUESKY_PASSWORD
 
@@ -14,23 +15,6 @@ processed_actors = set()
 actors_lock = threading.Lock()
 running = True
 
-def create_consumer(topic):
-    """Creates a Kafka consumer for a given topic."""
-    return KafkaConsumer(
-        topic,
-        bootstrap_servers=KAFKA_BROKER,
-        group_id=GROUP_ID,
-        auto_offset_reset='earliest',
-        enable_auto_commit=True,
-        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-    )
-
-def create_producer():
-    """Creates a Kafka producer."""
-    return KafkaProducer(
-        bootstrap_servers=KAFKA_BROKER,
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
-    )
 
 def consume_new_authors():
     """Listens for new authors and adds them to the actors set."""

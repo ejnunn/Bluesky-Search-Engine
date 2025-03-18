@@ -3,29 +3,12 @@ import json
 import signal
 import logging
 from kafka import KafkaConsumer, KafkaProducer
+from kafka_utils import create_consumer, create_producer
 from config import KAFKA_BROKER, POSTS_TOPIC, AUTHORS_TOPIC, GROUP_ID
 
 # In-memory set for deduplication
 actors = set()
 running = True
-
-def create_consumer():
-    """Creates a Kafka consumer for the posts topic."""
-    return KafkaConsumer(
-        POSTS_TOPIC,
-        bootstrap_servers=KAFKA_BROKER,
-        group_id=GROUP_ID,
-        auto_offset_reset='earliest',
-        enable_auto_commit=True,
-        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-    )
-
-def create_producer():
-    """Creates a Kafka producer for the authors topic."""
-    return KafkaProducer(
-        bootstrap_servers=KAFKA_BROKER,
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
-    )
 
 def process_messages(consumer, producer):
     """Consumes messages from the posts topic, extracts author handles, and publishes new ones."""
@@ -63,7 +46,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    consumer = create_consumer()
+    consumer = create_consumer(POSTS_TOPIC)
     producer = create_producer()
     process_messages(consumer, producer)
 
