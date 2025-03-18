@@ -1,62 +1,87 @@
-#!/usr/bin/env python3
-import requests
-import time
+from kafka import KafkaConsumer, KafkaProducer
 import json
+import time
 import os
 import logging
-from kafka import KafkaProducer
 from dotenv import load_dotenv
 from BlueSkyClient import BlueSkyClient
 
+# Kafka configuration
+KAFKA_BROKER = 'localhost:9092'
+POSTS_TOPIC = 'bluesky-posts'
+AUTHORS_TOPIC = 'bluesky-authors'
+GROUP_ID = 'bluesky-consumer-group'
 
-class KafkaBlueskyPostProducer:
-    """Kafka producer for sending Bluesky posts to a designated topic."""
+# Global set to track known authors
+actors = set(["bicycledutch.bsky.social"])
+processed_actors = set()
 
-    def __init__(self, kafka_broker: str, topic: str):
-        self.producer = KafkaProducer(
-            bootstrap_servers=kafka_broker,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
-        )
-        self.topic = topic
+def create_consumer(topic):
+    """Creates a Kafka consumer for a given topic."""
+    return KafkaConsumer(
+        topic,
+        bootstrap_servers=KAFKA_BROKER,
+        group_id=GROUP_ID,
+        auto_offset_reset='earliest',
+        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+    )
 
-    def send_posts(self, posts: list[dict]) -> None:
-        """Send posts one by one to the Kafka topic."""
-        for post in posts:
+def create_producer():
+    """Creates a Kafka producer."""
+    return KafkaProducer(
+        bootstrap_servers=KAFKA_BROKER,
+        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    )
+
+def consume_new_authors():
+    """Listens for new authors and adds them to the actors set."""
+    consumer = create_consumer(AUTHORS_TOPIC)
+    print(f"Listening for new authors on topic: {AUTHORS_TOPIC}")
+    
+    try:
+        for message in consumer:
+            author_handle = message.value
+            if author_handle not in actors:
+                actors.add(author_handle)
+                print(f"Added new author: {author_handle}")
+    except KeyboardInterrupt:
+        print("Author consumer shutting down.")
+
+def fetch_and_publish_posts(producer, bluesky_client):
+    """Fetches posts for all new actors and publishes them to Kafka."""
+    while True:
+        new_actors = actors - processed_actors
+        print(f"Fetching posts from {new_actors}")
+        for actor in list(new_actors):  # Only fetch posts from new actors
+            limit = 5
             try:
-                self.producer.send(self.topic, post)
+                feed = bluesky_client.get_actor_feed(actor, limit=limit)
+                filtered_feed = bluesky_client.filter_posts(feed)
+                for post in filtered_feed:
+                    producer.send(POSTS_TOPIC, post)
+                print(f"Sent {len(filtered_feed)} posts from {actor} to {POSTS_TOPIC}")
+                processed_actors.add(actor)  # Mark actor as processed
             except Exception as e:
-                logging.error(f"Failed to send post: {post}. Error. {e}")
+                logging.error(f"Error fetching posts for {actor}: {e}")
 
+        time.sleep(10)  # Avoid excessive API calls
 
 def main():
-    """
-    Main function to wire the API client and Kafka producer together.
-    This function can be scheduled to run as a standalone job.
-    """
-    # Set up Bluesky client
+    """Main function to run the author consumer and post producer."""
     load_dotenv()
     email = os.getenv("BLUESKY_EMAIL")
     password = os.getenv("BLUESKY_PASSWORD")
     bluesky_client = BlueSkyClient(email, password)
+    
+    producer = create_producer()
 
-    # Set up Kafka producer
-    kafka_broker = "localhost:9092"
-    producer = KafkaBlueskyPostProducer(kafka_broker=kafka_broker, topic="bluesky-posts")
+    # Run consumer in a separate thread
+    from threading import Thread
+    author_consumer_thread = Thread(target=consume_new_authors, daemon=True)
+    author_consumer_thread.start()
 
-    # Continually pull data from Bluesky, filter it and post it to the Kafka broker
-    try:
-        while True:
-            actor = "bicycledutch.bsky.social"
-            limit = 5
-            feed = bluesky_client.get_actor_feed(actor, limit=limit)
-            filtered_feed = bluesky_client.filter_posts(feed)
-            producer.send_posts(filtered_feed)
-            print(f"Sent {len(filtered_feed)} posts to Kafka broker {kafka_broker} with topic {producer.topic}")
-            time.sleep(10)
-    except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt. Shutting down.")
-
+    # Start fetching posts
+    fetch_and_publish_posts(producer, bluesky_client)
 
 if __name__ == "__main__":
     main()
-
