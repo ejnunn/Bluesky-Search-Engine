@@ -13,3 +13,6 @@ GROUP_ID = os.getenv("GROUP_ID", "bluesky-group")
 # BlueSky Credentials
 BLUESKY_EMAIL = os.getenv("BLUESKY_EMAIL")
 BLUESKY_PASSWORD = os.getenv("BLUESKY_PASSWORD")
+
+# Database setup
+DB_PATH = "bluesky_posts.db"
