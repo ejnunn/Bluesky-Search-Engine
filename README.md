@@ -28,8 +28,35 @@ Further work will focus on:
 - Expanding the testing strategy and CI/CD pipelines,
 - Integrating additional cloud-based monitoring and deployment strategies.
 
-## Getting Started
-1. Ensure `kafka` is installed locally.
-2. Run `python3 backend/data_ingestion.py` to begin fetching posts from Bluesky and posting them to the `bluesky-posts` Kafka topic. This script will also be listening to `bluesky-authors` for new authors to fetch more feeds.
-3. Run `python3 backend/author_extractor.py` to consume `bluesky-posts`, extract the author handles, and post them to `bluesky-authors`.
-4. To view the state of the Kafka brokers (locally for now) use the following command in a separate terminal: `kcat -b <BROKER> -C -t <TOPIC>`
+## Running the Project
+
+1. **Ensure Kafka is installed locally.**  
+
+2. **Start the Bluesky Post Producer:**  
+   This script fetches posts from Bluesky, publishes them to the `bluesky-posts` Kafka topic, and directly tracks new authors to fetch more posts in future iterations.  
+
+```bash
+python3 backend/bluesky_post_producer.py
+```
+
+3. **Start the Bluesky Post Consumer:**  
+   This script consumes messages from the `bluesky-posts` topic, extracts the necessary fields, and inserts the data into the SQLite database.  
+
+```bash
+python3 backend/bluesky_post_consumer.py
+```
+
+4. **Monitor Kafka Topics (Optional):**  
+   To view the state of the Kafka brokers (locally for now), use the following command in a separate terminal:  
+
+```bash
+kcat -b <BROKER> -C -t <TOPIC>
+```
+
+5. **Verify Database Contents (Optional):**  
+   To inspect the contents of the SQLite database, run the following command:  
+
+```bash
+sqlite3 bluesky_posts.db "SELECT * FROM posts;"
+```
+
