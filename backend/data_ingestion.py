@@ -4,39 +4,16 @@ import time
 import signal
 import logging
 import threading
-from kafka import KafkaConsumer, KafkaProducer
-from kafka_utils import create_consumer, create_producer
+from kafka import KafkaProducer
+from kafka_utils import create_producer
 from BlueSkyClient import BlueSkyClient
-from config import KAFKA_BROKER, POSTS_TOPIC, AUTHORS_TOPIC, GROUP_ID, BLUESKY_EMAIL, BLUESKY_PASSWORD
+from config import KAFKA_BROKER, POSTS_TOPIC, GROUP_ID, BLUESKY_EMAIL, BLUESKY_PASSWORD
 
 # Global state and lock
 actors = set(["bicycledutch.bsky.social"])
 processed_actors = set()
 actors_lock = threading.Lock()
 running = True
-
-
-def consume_new_authors():
-    """Listens for new authors and adds them to the actors set."""
-    consumer = create_consumer(AUTHORS_TOPIC)
-    logging.info(f"Listening for new authors on topic: {AUTHORS_TOPIC}")
-    try:
-        while running:
-            message_pack = consumer.poll(timeout_ms=1000)
-            if not message_pack:
-                continue
-            for tp, messages in message_pack.items():
-                for message in messages:
-                    author_handle = message.value
-                    with actors_lock:
-                        if author_handle not in actors:
-                            actors.add(author_handle)
-                            logging.info(f"Added new author: {author_handle}")
-    except Exception as e:
-        logging.error(f"Error in consume_new_authors: {e}")
-    finally:
-        consumer.close()
-        logging.info("Author consumer shutting down.")
 
 def fetch_and_publish_posts(producer, bluesky_client):
     """Fetches posts for new actors and publishes them to Kafka."""
@@ -51,8 +28,18 @@ def fetch_and_publish_posts(producer, bluesky_client):
             try:
                 feed = bluesky_client.get_actor_feed(actor, limit=limit)
                 filtered_feed = bluesky_client.filter_posts(feed)
+                
                 for post in filtered_feed:
                     producer.send(POSTS_TOPIC, post)
+
+                    # Directly add new author_handle to the actors set
+                    author_handle = post[0]
+                    if author_handle:
+                        with actors_lock:
+                            if author_handle not in actors:
+                                actors.add(author_handle)
+                                logging.info(f"Added new author to actors set: {author_handle}")
+
                 logging.info(f"Sent {len(filtered_feed)} posts from {actor} to {POSTS_TOPIC}")
                 with actors_lock:
                     processed_actors.add(actor)
@@ -80,10 +67,6 @@ def main():
 
     bluesky_client = BlueSkyClient(BLUESKY_EMAIL, BLUESKY_PASSWORD)
     producer = create_producer()
-
-    # Start consumer thread for new authors
-    consumer_thread = threading.Thread(target=consume_new_authors, daemon=True)
-    consumer_thread.start()
 
     # Main loop: fetch posts for new actors
     fetch_and_publish_posts(producer, bluesky_client)
