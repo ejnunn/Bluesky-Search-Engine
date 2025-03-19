@@ -47,7 +47,7 @@ def fetch_and_publish_posts(producer, bluesky_client):
         if new_actors:
             logging.info(f"Fetching posts from new actors: {new_actors}")
         for actor in list(new_actors):
-            limit = 5
+            limit = 10
             try:
                 feed = bluesky_client.get_actor_feed(actor, limit=limit)
                 filtered_feed = bluesky_client.filter_posts(feed)
