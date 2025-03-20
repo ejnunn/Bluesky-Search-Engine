@@ -1,3 +1,4 @@
 .env
 backend/__pycache__/
+backend/data_ingestion/__pycache__/
 bluesky_posts.db
