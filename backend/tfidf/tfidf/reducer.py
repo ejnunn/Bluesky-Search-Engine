@@ -44,4 +44,4 @@ for term, docid, term_count, term_count_per_docid in doc_counts:
     idf = math.log(N / df) if df > 0 else 0  # Avoid division by zero
     tfidf = tf * idf
 
-    print(f"({term}, {docid})\t{tfidf:.6f}")
+    print(f"{term}\t{docid}\t{tfidf:.6f}")
