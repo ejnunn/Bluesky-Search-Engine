@@ -4,5 +4,7 @@ backend/__pycache__/
 backend/data_ingestion/__pycache__/
 backend/tfidf/.DS_Store
 
-# Database
+# Databases and other data
 bluesky_posts.db
+output/
+
