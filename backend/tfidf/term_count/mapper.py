@@ -1,38 +1,24 @@
 #!/usr/bin/env python3
 """
-term_count/mapper.py
-
-Term count refers to the count of each term in each document.
-Identical terms from different documents represent separate term counts in this context.
+term_count/mapper.py - Modified for Bluesky Data
 """
 
 import sys
-import os
-from nltk.stem import PorterStemmer
+from nltk.stem import WordNetLemmatizer
+from utils import stop_words  # Assuming your utils.py handles stop words
 
-# Add the 'utils' directory to the sys.path to be able to import utils
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'utils')))
-
-# Now import the stop_words set from utils.py
-from utils import stop_words
-
-def get_docid():
-    """Extract document ID from Hadoop's environment or fallback for local use."""
-    filepath = os.getenv('map_input_file')
-    if filepath:
-        return os.path.splitext(os.path.basename(filepath))[0]
-    return "unknown_doc"  # Fallback when running locally without Hadoop
-
-ps = PorterStemmer()
-
-docid = get_docid()
+lemma = WordNetLemmatizer()
 
 for line in sys.stdin.buffer.read().decode("utf-8", "ignore").splitlines():
-    for word in line.strip().split():
+    try:
+        author_handle, content = line.strip().split("|", 1)  # Updated delimiter
+    except ValueError:
+        continue  # Ignore malformed lines
+
+    for word in content.strip().split():
         lowered = word.lower()
-        term = "".join(filter(lambda c: 97 <= ord(c) <= 122, lowered))  # Only lowercase a-z
-        term_stem = ps.stem(term)
+        term = "".join(filter(str.isalpha, lowered))  # Keep only alphabetic characters
+        term_lemma = lemma.lemmatize(term)
 
-        if term_stem and term_stem not in stop_words:  # Filter out stop words
-            print(f"{term_stem}+{docid}\t1")
-
+        if term_lemma and term_lemma not in stop_words:
+            sys.stdout.buffer.write(f"{term_lemma}+{author_handle}\t1\n".encode("utf-8"))

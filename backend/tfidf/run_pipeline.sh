@@ -1,24 +1,43 @@
-# Setup
-corpus_directory=data/state_union/
-corpus=$(ls $corpus_directory*.txt)  # Expanding the glob pattern
-num_files=$(echo $corpus | wc -w)
-mkdir -p output # Ensure the output directory exists
+#!/bin/bash
+# TF-IDF Pipeline for Bluesky Data
 
-echo "Calculating TF-IDF for the corpus: $corpus_directory"
-echo "Number of files: $num_files"
-echo "Creating output directory."
+DB_PATH="bluesky_posts.db"
+OUTPUT_DIR="output"
 
-# Step 1: Run the Term Count Job
-echo "Running the Term Count Job -> (term+docid, term_count)"
-for file in $corpus; do
-    export map_input_file="$file"
-    cat "$file" | python3 term_count/mapper.py | sort | python3 term_count/reducer.py
-done > output/term_counts.txt
+# Ensure output directory exists
+mkdir -p $OUTPUT_DIR
 
-# Step 2: Run the Term Count per Document Job
-echo "Running the Term Count per Document Job -> (docid+term, term_count+terms_per_docid)"
-cat output/term_counts.txt | python3 term_count_per_document/mapper.py | sort | python3 term_count_per_document/reducer.py > output/term_count_per_document.txt
+echo "Calculating TF-IDF from database: $DB_PATH"
 
-# Step 3: Run the TF-IDF Job
-echo "Running the TF-IDF Job -> (docid+term, tf_idf)"
-cat output/term_count_per_document.txt | python3 tfidf/mapper.py | sort | python3 tfidf/reducer.py > output/tfidf.txt
+# Step 1: Extract posts from the database and clean newlines within posts
+echo "Fetching posts from database..."
+sqlite3 bluesky_posts.db "SELECT author_handle, REPLACE(REPLACE(content, CHAR(13), ''), CHAR(10), ' ') AS content FROM posts;" > output/posts.txt
+
+
+# Step 2: Run the Term Count Job
+echo "Running Term Count Job: (author_handle | content) -> (term+author_handle, term_count)"
+cat $OUTPUT_DIR/posts.txt | python3 term_count/mapper.py | sort | python3 term_count/reducer.py > $OUTPUT_DIR/term_counts.txt
+
+# Step 3: Run the Term Count per Document Job
+echo "Running Term Count per Document Job -> (author_handle+term, term_count+terms_per_doc)"
+cat $OUTPUT_DIR/term_counts.txt | python3 term_count_per_document/mapper.py | sort | python3 term_count_per_document/reducer.py > $OUTPUT_DIR/term_count_per_document.txt
+
+# Step 4: Run the TF-IDF Job
+echo "Running TF-IDF Job -> (author_handle+term, tf_idf)"
+cat $OUTPUT_DIR/term_count_per_document.txt | python3 tfidf/mapper.py | sort | python3 tfidf/reducer.py > $OUTPUT_DIR/tfidf.txt
+
+# Step 5: Insert TF-IDF results into the database
+echo "Inserting TF-IDF scores back into database..."
+sqlite3 $DB_PATH <<EOF
+DROP TABLE IF EXISTS tfidf;
+CREATE TABLE tfidf (
+    term TEXT,
+    author_handle TEXT,
+    score REAL
+);
+
+.separator "\t"
+.import $OUTPUT_DIR/tfidf.txt tfidf
+EOF
+
+echo "TF-IDF calculation complete."
