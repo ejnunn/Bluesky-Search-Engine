@@ -1,7 +1,7 @@
 # Environment
 .env
 __pycache__/
-backend/tfidf/.DS_Store
+.DS_Store
 
 # Databases and other data
 bluesky_posts.db
